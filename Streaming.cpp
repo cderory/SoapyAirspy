@@ -196,6 +196,7 @@ int SoapyAirspy::deactivateStream(SoapySDR::Stream *stream, const int flags, con
     ret = airspy_stop_rx(dev_);
 
     if (ret != AIRSPY_SUCCESS) {
+        SoapySDR::logf(SOAPY_SDR_ERROR, "airspy_stop_rx() failed: %d", ret);
         return SOAPY_SDR_STREAM_ERROR;
     }
 
@@ -213,11 +214,15 @@ int SoapyAirspy::readStream(SoapySDR::Stream *stream,
 
     const auto to_convert = std::min(numElems, getStreamMTU(stream));
 
-    SoapySDR::logf(SOAPY_SDR_DEBUG, "readStream: numElems=%d, timeoutUs=%ld, topcopy=%ld", numElems, timeoutUs, to_convert);
+    // Some programs use a way to short timeout and this causes some condition variable problems.
+    // maybe try lock free ringbuffer?
+    const long timeoutUs2 = timeoutUs < 250000 ? 500000 : timeoutUs;
+
+    // SoapySDR::logf(SOAPY_SDR_DEBUG, "readStream: numElems=%d, timeoutUs=%ld, topcopy=%ld", numElems, timeoutUs, to_convert);
 
     const auto converted = ringbuffer_.read_at_least<std::complex<int16_t>>
         (to_convert,
-         std::chrono::microseconds(timeoutUs),
+         std::chrono::microseconds(timeoutUs2),
          [&](const std::complex<int16_t>* begin, [[maybe_unused]] const uint32_t available) {
              // Convert samples to output buffer
              converterFunction_(begin,

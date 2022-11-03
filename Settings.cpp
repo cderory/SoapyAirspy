@@ -31,6 +31,7 @@ SoapyAirspy::SoapyAirspy(const SoapySDR::Kwargs &args)
 
     int ret;
 
+    //SoapySDR::setLogLevel(SOAPY_SDR_DEBUG);
     SoapySDR::setLogLevel(SOAPY_SDR_INFO);
 
     std::stringstream serialstr;
@@ -433,8 +434,10 @@ void SoapyAirspy::setBandwidth(const int direction, const size_t channel, const 
         return;
     }
 
+    bandwidth_ = bw;
+
     // TODO: not sure about default implementation.
-    SoapySDR::Device::setBandwidth(direction, channel, bw);
+    //SoapySDR::Device::setBandwidth(direction, channel, bw);
 }
 
 double SoapyAirspy::getBandwidth(const int direction, const size_t channel) const
@@ -444,13 +447,26 @@ double SoapyAirspy::getBandwidth(const int direction, const size_t channel) cons
         return 0;
     }
 
+    return bandwidth_;
+
     // TODO: again not sure about default implementation.
-    return SoapySDR::Device::getBandwidth(direction, channel);
+    // return SoapySDR::Device::getBandwidth(direction, channel);
 }
 
 std::vector<double> SoapyAirspy::listBandwidths(const int direction, const size_t channel) const
 {
     std::vector<double> results;
+
+    if(direction != SOAPY_SDR_RX or channel != 0) {
+        SoapySDR_logf(SOAPY_SDR_ERROR, "listBandwidths() invalid direction or channel");
+        return results;
+    }
+
+    for(const auto& samplerate : listSampleRates(direction, channel)) {
+        // Conservative estimate
+        results.push_back(samplerate * 0.75);
+    }
+
     return results;
 }
 

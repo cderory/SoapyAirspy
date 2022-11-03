@@ -220,6 +220,8 @@ private:
     uint32_t sampleRate_;
     uint32_t centerFrequency_;
 
+    double bandwidth_;
+
     RingBuffer ringbuffer_;
 
     SoapySDR::ConverterRegistry::ConverterFunction converterFunction_;
