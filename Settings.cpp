@@ -31,6 +31,8 @@ SoapyAirspy::SoapyAirspy(const SoapySDR::Kwargs &args)
 
     int ret;
 
+    SoapySDR::setLogLevel(SOAPY_SDR_INFO);
+
     std::stringstream serialstr;
     serialstr.str("");
 

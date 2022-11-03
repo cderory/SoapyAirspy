@@ -51,7 +51,7 @@ std::vector<std::string> SoapyAirspy::getStreamFormats(const int direction, cons
 }
 
 std::string SoapyAirspy::getNativeStreamFormat(const int direction, const size_t channel, double &fullScale) const {
-    // TODO maybe use constant? 
+    // TODO maybe use constant?
     fullScale = 32767;
     return SOAPY_SDR_CS16;
 }
@@ -132,6 +132,13 @@ SoapySDR::Stream *SoapyAirspy::setupStream(const int direction,
 
     // Find converter functinon
     converterFunction_ = SoapySDR::ConverterRegistry::getFunction(SOAPY_NATIVE_FORMAT, format, SoapySDR::ConverterRegistry::GENERIC);
+
+    // TODO
+    ret = airspy_set_packing(dev_, 1);
+    if(ret != AIRSPY_SUCCESS) {
+        SoapySDR::logf(SOAPY_SDR_ERROR, "SoapyAirspy::setupStream: airspy_set_packing failed: %d", ret);
+        return nullptr;
+    }
 
     ret = airspy_set_sample_type(dev_, AIRSPY_SAMPLE_INT16_IQ);
     if(ret != AIRSPY_SUCCESS) {
