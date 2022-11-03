@@ -24,17 +24,19 @@
 
 #include "SoapyAirspy.hpp"
 #include <SoapySDR/Registry.hpp>
-#include <cstdlib> //malloc
+// #include <cstdlib> //malloc
 #include <algorithm>
 
 static std::vector<SoapySDR::Kwargs> findAirspy(const SoapySDR::Kwargs &args)
 {
     std::vector<SoapySDR::Kwargs> results;
-    
+
     airspy_lib_version_t asVersion;
     airspy_lib_version(&asVersion);
-    
-    SoapySDR_logf(SOAPY_SDR_DEBUG, "AirSpy Lib v%d.%d rev %d", asVersion.major_version, asVersion.minor_version, asVersion.revision);
+
+    SoapySDR_logf(SOAPY_SDR_DEBUG, "AirSpy Lib v%d.%d rev %d", asVersion.major_version,
+                  asVersion.minor_version,
+                  asVersion.revision);
 
     uint64_t serials[MAX_DEVICES];
     int count = airspy_list_devices(serials, MAX_DEVICES);
@@ -44,14 +46,14 @@ static std::vector<SoapySDR::Kwargs> findAirspy(const SoapySDR::Kwargs &args)
     }
 
     SoapySDR_logf(SOAPY_SDR_DEBUG, "%d AirSpy boards found.", count);
-    
+
     for (int i = 0; i < count; i++) {
         std::stringstream serialstr;
-        
+
         serialstr.str("");
         serialstr << std::hex << serials[i];
-        
-        SoapySDR_logf(SOAPY_SDR_DEBUG, "Serial %s", serialstr.str().c_str());        
+
+        SoapySDR_logf(SOAPY_SDR_DEBUG, "Serial %s", serialstr.str().c_str());
 
         SoapySDR::Kwargs soapyInfo;
 

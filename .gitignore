@@ -1,2 +1,5 @@
 build/
 .vscode/
+.cache/
+.projectile
+compile_commands.json

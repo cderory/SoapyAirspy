@@ -54,6 +54,7 @@ SOAPY_SDR_MODULE_UTIL(
         Registration.cpp
         Settings.cpp
         Streaming.cpp
+        RingBuffer.hpp
     LIBRARIES
         ${AIRSPY_LIBS}
 )

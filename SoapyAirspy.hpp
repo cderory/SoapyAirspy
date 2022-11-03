@@ -26,6 +26,7 @@
 #include <SoapySDR/Device.hpp>
 #include <SoapySDR/Logger.h>
 #include <SoapySDR/Types.h>
+#include <SoapySDR/ConverterRegistry.hpp>
 #include <stdexcept>
 #include <thread>
 #include <mutex>
@@ -36,10 +37,11 @@
 #include <algorithm>
 #include <atomic>
 
+
 #include <libairspy/airspy.h>
 
-#define DEFAULT_BUFFER_BYTES 262144
-#define DEFAULT_NUM_BUFFERS 8
+#include "RingBuffer.hpp"
+
 #define MAX_DEVICES 32
 
 class SoapyAirspy: public SoapySDR::Device
@@ -90,33 +92,32 @@ public:
 
     int deactivateStream(SoapySDR::Stream *stream, const int flags = 0, const long long timeNs = 0);
 
-    int readStream(
-            SoapySDR::Stream *stream,
-            void * const *buffs,
-            const size_t numElems,
-            int &flags,
-            long long &timeNs,
-            const long timeoutUs = 100000);
+    int readStream(SoapySDR::Stream *stream,
+                   void * const *buffs,
+                   const size_t numElems,
+                   int &flags,
+                   long long &timeNs,
+                   const long timeoutUs = 100000);
 
     /*******************************************************************
      * Direct buffer access API
      ******************************************************************/
 
-    size_t getNumDirectAccessBuffers(SoapySDR::Stream *stream);
+    // size_t getNumDirectAccessBuffers(SoapySDR::Stream *stream);
 
-    int getDirectAccessBufferAddrs(SoapySDR::Stream *stream, const size_t handle, void **buffs);
+    // int getDirectAccessBufferAddrs(SoapySDR::Stream *stream, const size_t handle, void **buffs);
 
-    int acquireReadBuffer(
-        SoapySDR::Stream *stream,
-        size_t &handle,
-        const void **buffs,
-        int &flags,
-        long long &timeNs,
-        const long timeoutUs = 100000);
+    // int acquireReadBuffer(
+    //     SoapySDR::Stream *stream,
+    //     size_t &handle,
+    //     const void **buffs,
+    //     int &flags,
+    //     long long &timeNs,
+    //     const long timeoutUs = 100000);
 
-    void releaseReadBuffer(
-        SoapySDR::Stream *stream,
-        const size_t handle);
+    // void releaseReadBuffer(
+    //     SoapySDR::Stream *stream,
+    //     const size_t handle);
 
     /*******************************************************************
      * Antenna API
@@ -206,32 +207,23 @@ public:
 private:
 
     //device handle
-    uint64_t serial;
-    struct airspy_device *dev;
+    uint64_t serial_;
+    struct airspy_device *dev_;
 
-    //cached settings
-    uint32_t sampleRate, centerFrequency;
-    unsigned int bufferLength;
-    size_t numBuffers;
-    bool agcMode, streamActive, rfBias, bitPack;
-    std::atomic_bool sampleRateChanged;
-    int bytesPerSample;
-    uint8_t lnaGain, mixerGain, vgaGain;
-    
+    // Gains
+    uint8_t lnaGain_;
+    uint8_t mixerGain_;
+    uint8_t vgaGain_;
+
+    bool agcMode_;
+
+    uint32_t sampleRate_;
+    uint32_t centerFrequency_;
+
+    RingBuffer ringbuffer_;
+
+    SoapySDR::ConverterRegistry::ConverterFunction converterFunction_;
 public:
     //async api usage
     int rx_callback(airspy_transfer *t);
-
-    std::mutex _buf_mutex;
-    std::condition_variable _buf_cond;
-
-    std::vector<std::vector<char> > _buffs;
-    size_t	_buf_head;
-    size_t	_buf_tail;
-    std::atomic<size_t>	_buf_count;
-    char *_currentBuff;
-    std::atomic<bool> _overflowEvent;
-    size_t bufferedElems;
-    size_t _currentHandle;
-    bool resetBuffer;
 };
