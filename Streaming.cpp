@@ -34,23 +34,20 @@
 
 #define SOAPY_NATIVE_FORMAT SOAPY_SDR_CS16
 
-std::vector<std::string> SoapyAirspy::getStreamFormats(const int direction, const size_t channel) const {
+std::vector<std::string> SoapyAirspy::getStreamFormats(const int direction,
+                                                       const size_t channel) const {
 
     std::vector<std::string> formats;
 
-    if(direction != SOAPY_SDR_RX) {
-        SoapySDR::logf(SOAPY_SDR_ERROR, "SoapyAirspy::getStreamFormats(%d, %d) - direction must be RX", direction, channel);
-        return formats;
-    }
-
-    for (const auto &target : SoapySDR::ConverterRegistry::listTargetFormats(SOAPY_NATIVE_FORMAT)) {
-        formats.push_back(target);
-    }
+    formats.push_back(SOAPY_SDR_CS16);
+    formats.push_back(SOAPY_SDR_CF32);
 
     return formats;
 }
 
-std::string SoapyAirspy::getNativeStreamFormat(const int direction, const size_t channel, double &fullScale) const {
+std::string SoapyAirspy::getNativeStreamFormat(const int direction,
+                                               const size_t channel,
+                                               double &fullScale) const {
     // TODO maybe use constant?
     fullScale = 32767;
     return SOAPY_SDR_CS16;
@@ -66,6 +63,7 @@ SoapySDR::ArgInfoList SoapyAirspy::getStreamArgsInfo(const int direction,
  * Async thread work
  ******************************************************************/
 
+// 16 bit samples
 static int rx_callback_(airspy_transfer *transfer)
 {
     SoapyAirspy *self = (SoapyAirspy *)transfer->ctx;
@@ -74,27 +72,22 @@ static int rx_callback_(airspy_transfer *transfer)
 
 int SoapyAirspy::rx_callback(airspy_transfer *transfer)
 {
+    const uint32_t timeout_us = 250000;
+    const uint32_t to_copy = transfer->sample_count * sampleSize_;
 
-    const uint32_t timeout_us = 500000;
-
-    // SoapySDR::logf(SOAPY_SDR_INFO, "rx_callback %ld %d",
-    //                transfer->sample_count, transfer->sample_type);
-
-    const auto written = ringbuffer_.write_at_least<std::complex<int16_t>>
-        (transfer->sample_count,
+    const auto copied = ringbuffer_.write_at_least
+        (to_copy,
          std::chrono::microseconds(timeout_us),
-         [&](std::complex<int16_t>* begin, [[maybe_unused]] const uint32_t available) {
+         [&](uint8_t* begin, [[maybe_unused]] const uint32_t available) {
              // Copy samples to ringbufer
-
              std::memcpy(begin,
                          transfer->samples,
-                         transfer->sample_count * sizeof(std::complex<int16_t>));
+                         to_copy);
 
-
-             return transfer->sample_count;
+             return to_copy;
          });
 
-    if(written < 0) {
+    if(copied < 0) {
         SoapySDR::logf(SOAPY_SDR_INFO, "SoapyAirspy::rx_callback: ringbuffer write timeout");
         return 0;
     }
@@ -114,7 +107,8 @@ SoapySDR::Stream *SoapyAirspy::setupStream(const int direction,
     int ret;
 
     if(direction != SOAPY_SDR_RX) {
-        SoapySDR::logf(SOAPY_SDR_ERROR, "SoapyAirspy::setupStream(%d, %s, %d, %d) - direction must be RX", direction, format.c_str(), channels.size(), args.size());
+        SoapySDR::logf(SOAPY_SDR_ERROR, "SoapyAirspy::setupStream(%d, %s, %d, %d) -"
+                       " direction must be RX", direction, format.c_str(), channels.size(), args.size());
         return nullptr;
     }
 
@@ -123,44 +117,44 @@ SoapySDR::Stream *SoapyAirspy::setupStream(const int direction,
         throw std::runtime_error("setupStream invalid channel selection");
     }
 
-    std::vector<std::string> sources = SoapySDR::ConverterRegistry::listSourceFormats(format);
+    airspy_sample_type sampleType = AIRSPY_SAMPLE_INT16_IQ;
 
-    if (std::find(sources.begin(), sources.end(), SOAPY_NATIVE_FORMAT) == sources.end()) {
-        throw std::runtime_error(
-                "setupStream invalid format '" + format + "'.");
+    // Check the format
+    if (format == SOAPY_SDR_CF32) {
+        SoapySDR::logf(SOAPY_SDR_INFO, "Using format CF32.");
+        sampleType = AIRSPY_SAMPLE_FLOAT32_IQ;
+    }
+    else if (format == SOAPY_SDR_CS16) {
+        SoapySDR::logf(SOAPY_SDR_INFO, "Using format CS16.");
+        sampleType = AIRSPY_SAMPLE_INT16_IQ;
+    } else {
+        throw std::runtime_error("setupStream invalid format: " + format);
     }
 
-    // Find converter functinon
-    converterFunction_ = SoapySDR::ConverterRegistry::getFunction(SOAPY_NATIVE_FORMAT, format, SoapySDR::ConverterRegistry::GENERIC);
+    // Setup our sample size
+    sampleSize_ = SoapySDR::formatToSize(format);
 
-    // TODO
-    ret = airspy_set_packing(dev_, 1);
+    SoapySDR::logf(SOAPY_SDR_DEBUG, "sample type: %d, sample size %d",
+                   sampleType, sampleSize_);
+
+    ret = airspy_set_sample_type(dev_, sampleType);
     if(ret != AIRSPY_SUCCESS) {
-        SoapySDR::logf(SOAPY_SDR_ERROR, "SoapyAirspy::setupStream: airspy_set_packing failed: %d", ret);
+        SoapySDR::logf(SOAPY_SDR_ERROR, "airspy_set_sample_type() failed: %s (%d)",
+                       airspy_error_name((airspy_error)ret), ret);
         return nullptr;
     }
-
-    ret = airspy_set_sample_type(dev_, AIRSPY_SAMPLE_INT16_IQ);
-    if(ret != AIRSPY_SUCCESS) {
-        SoapySDR::logf(SOAPY_SDR_ERROR, "airspy_set_sample_type() failed: %s (%d)", airspy_error_name((airspy_error)ret), ret);
-        return nullptr;
-    }
-
-    SoapySDR::logf(SOAPY_SDR_INFO, "setupStream: format=%s", format.c_str());
 
     return (SoapySDR::Stream *) this;
 }
 
 void SoapyAirspy::closeStream(SoapySDR::Stream *stream)
 {
-    //TODO
-    ringbuffer_.clear();
 }
 
 size_t SoapyAirspy::getStreamMTU(SoapySDR::Stream *stream) const
 {
-    // TODO
-    return 65536;
+    // TODO: MAKE DEFINE
+    return SOAPY_AIRSPY_STREAM_MTU;
 }
 
 int SoapyAirspy::activateStream(SoapySDR::Stream *stream,
@@ -194,7 +188,6 @@ int SoapyAirspy::deactivateStream(SoapySDR::Stream *stream, const int flags, con
     if (flags != 0) { return SOAPY_SDR_NOT_SUPPORTED; }
 
     ret = airspy_stop_rx(dev_);
-
     if (ret != AIRSPY_SUCCESS) {
         SoapySDR::logf(SOAPY_SDR_ERROR, "airspy_stop_rx() failed: %d", ret);
         return SOAPY_SDR_STREAM_ERROR;
@@ -212,29 +205,20 @@ int SoapyAirspy::readStream(SoapySDR::Stream *stream,
 
     if(flags != 0) { return SOAPY_SDR_NOT_SUPPORTED; }
 
-    const auto to_convert = std::min(numElems, getStreamMTU(stream));
+    const auto to_copy = std::min(numElems * sampleSize_,
+                                  getStreamMTU(stream) * sampleSize_);
 
-    // Some programs use a way to short timeout and this causes some condition variable problems.
-    // maybe try lock free ringbuffer?
-    const long timeoutUs2 = timeoutUs < 250000 ? 500000 : timeoutUs;
-
-    // SoapySDR::logf(SOAPY_SDR_DEBUG, "readStream: numElems=%d, timeoutUs=%ld, topcopy=%ld", numElems, timeoutUs, to_convert);
-
-    const auto converted = ringbuffer_.read_at_least<std::complex<int16_t>>
-        (to_convert,
-         std::chrono::microseconds(timeoutUs2),
-         [&](const std::complex<int16_t>* begin, [[maybe_unused]] const uint32_t available) {
-             // Convert samples to output buffer
-             converterFunction_(begin,
-                                buffs[0],
-                                to_convert,
-                                1.0);
-
+    auto copied = ringbuffer_.read_at_least
+        (to_copy,
+         std::chrono::microseconds(timeoutUs),
+         [&](const uint8_t* begin, [[maybe_unused]] const uint32_t available) {
+             // Copy to output buffer
+             std::memcpy(buffs[0], begin, to_copy);
              // Consume from ringbuffer
-             return to_convert;
+             return to_copy;
          });
 
-    if(converted < 0) {
+    if(copied < 0) {
         SoapySDR::logf(SOAPY_SDR_DEBUG, "readStream: ringbuffer read timeout");
         return SOAPY_SDR_TIMEOUT;
     }
@@ -242,5 +226,5 @@ int SoapyAirspy::readStream(SoapySDR::Stream *stream,
     // TODO
     timeNs = 0;
 
-    return converted;
+    return copied/sampleSize_;
 }

@@ -44,6 +44,8 @@
 
 #define MAX_DEVICES 32
 
+#define SOAPY_AIRSPY_STREAM_MTU 65536
+
 class SoapyAirspy: public SoapySDR::Device
 {
 public:
@@ -215,6 +217,12 @@ private:
     uint8_t mixerGain_;
     uint8_t vgaGain_;
 
+    uint32_t sampleSize_;
+
+    // Other settings
+    bool rfBias_;
+    bool bitPack_;
+
     bool agcMode_;
 
     uint32_t sampleRate_;
@@ -222,10 +230,10 @@ private:
 
     double bandwidth_;
 
-    RingBuffer ringbuffer_;
+    RingBuffer<uint8_t> ringbuffer_;
 
     SoapySDR::ConverterRegistry::ConverterFunction converterFunction_;
+
 public:
-    //async api usage
-    int rx_callback(airspy_transfer *t);
+    int rx_callback(airspy_transfer *transfer);
 };

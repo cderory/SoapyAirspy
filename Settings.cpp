@@ -26,19 +26,21 @@
 
 SoapyAirspy::SoapyAirspy(const SoapySDR::Kwargs &args)
     : dev_(nullptr),
-      ringbuffer_(21) // fits 8 buffers
+      sampleSize_(0),
+      rfBias_(false),
+      bitPack_(false),
+      ringbuffer_(1 << 23) // fits 8 buffers
 {
 
     int ret;
 
-    //SoapySDR::setLogLevel(SOAPY_SDR_DEBUG);
-    SoapySDR::setLogLevel(SOAPY_SDR_INFO);
+    SoapySDR::setLogLevel(SOAPY_SDR_DEBUG);
+    //SoapySDR::setLogLevel(SOAPY_SDR_INFO);
 
     std::stringstream serialstr;
     serialstr.str("");
 
-    if (args.count("serial") != 0)
-    {
+    if (args.count("serial") != 0) {
         try {
             serial_ = std::stoull(args.at("serial"), nullptr, 16);
         } catch (const std::invalid_argument &) {
@@ -53,21 +55,22 @@ SoapyAirspy::SoapyAirspy(const SoapySDR::Kwargs &args)
             // TODO: add ret to error message
             throw std::runtime_error("Unable to open AirSpy device with serial " + serialstr.str());
         }
-        SoapySDR_logf(SOAPY_SDR_DEBUG, "Found AirSpy device: serial = %16Lx", serial_);
+        SoapySDR::logf(SOAPY_SDR_DEBUG, "Found AirSpy device: serial = %16Lx", serial_);
     }
-    else
-    {
+    else {
         ret = airspy_open(&dev_);
         if (ret != AIRSPY_SUCCESS) {
             throw std::runtime_error("Unable to open AirSpy device");
         }
     }
 
-    //apply arguments to settings when they match
-    for (const auto &info : this->getSettingInfo())
-    {
+    // Apply arguments to settings when they match
+    for (const auto &info : getSettingInfo()) {
         const auto it = args.find(info.key);
-        if (it != args.end()) this->writeSetting(it->first, it->second);
+        if (it != args.end()) {
+            SoapySDR::logf(SOAPY_SDR_DEBUG, "SoapyAirspy::SoapyAirspy(%s) = %s", info.key.c_str(), it->second.c_str());
+            writeSetting(it->first, it->second);
+        }
     }
 }
 
@@ -130,7 +133,7 @@ std::vector<std::string> SoapyAirspy::listAntennas(const int direction, const si
 
 void SoapyAirspy::setAntenna(const int direction, const size_t channel, const std::string &name)
 {
-    // TODO
+    SoapySDR::logf(SOAPY_SDR_DEBUG, "SoapyAirspy::setAntenna(%s)", name.c_str());
 }
 
 std::string SoapyAirspy::getAntenna(const int direction, const size_t channel) const
@@ -177,19 +180,19 @@ void SoapyAirspy::setGainMode(const int direction, const size_t channel, const b
         SoapySDR::logf(SOAPY_SDR_ERROR, "setGainMode: invalid direction");
     }
 
-    SoapySDR_logf(SOAPY_SDR_DEBUG, "setGainMode(%d)", automatic);
+    SoapySDR::logf(SOAPY_SDR_DEBUG, "setGainMode(%d)", automatic);
 
     if(agcMode_ != automatic) {
         // LNA
         ret = airspy_set_lna_agc(dev_, automatic);
         if(ret != AIRSPY_SUCCESS) {
-            SoapySDR_logf(SOAPY_SDR_ERROR, "airspy_set_lna_agc() failed: %d", ret);
+            SoapySDR::logf(SOAPY_SDR_ERROR, "airspy_set_lna_agc() failed: %d", ret);
             return;
         }
         // Mixer
         ret = airspy_set_mixer_agc(dev_, automatic);
         if(ret != AIRSPY_SUCCESS) {
-            SoapySDR_logf(SOAPY_SDR_ERROR, "airspy_set_mixer_agc() failed: %d", ret);
+            SoapySDR::logf(SOAPY_SDR_ERROR, "airspy_set_mixer_agc() failed: %d", ret);
             return;
         }
         // Store
@@ -220,7 +223,7 @@ void SoapyAirspy::setGain(const int direction, const size_t channel, const std::
         uint8_t lnaGain = static_cast<uint8_t>(value);
         ret = airspy_set_lna_gain(dev_, lnaGain);
         if(ret != AIRSPY_SUCCESS) {
-            SoapySDR_logf(SOAPY_SDR_ERROR, "airspy_set_lna_gain() failed: %d", ret);
+            SoapySDR::logf(SOAPY_SDR_ERROR, "airspy_set_lna_gain() failed: %d", ret);
             return;
         }
         // Success
@@ -231,7 +234,7 @@ void SoapyAirspy::setGain(const int direction, const size_t channel, const std::
         uint8_t mixerGain = uint8_t(value);
         ret = airspy_set_mixer_gain(dev_, mixerGain);
         if(ret != AIRSPY_SUCCESS) {
-            SoapySDR_logf(SOAPY_SDR_ERROR, "airspy_set_mixer_gain() failed: %d", ret);
+            SoapySDR::logf(SOAPY_SDR_ERROR, "airspy_set_mixer_gain() failed: %d", ret);
             return;
         }
         // Success
@@ -242,7 +245,7 @@ void SoapyAirspy::setGain(const int direction, const size_t channel, const std::
         uint8_t vgaGain = uint8_t(value);
         ret = airspy_set_vga_gain(dev_, vgaGain_);
         if(ret != AIRSPY_SUCCESS) {
-            SoapySDR_logf(SOAPY_SDR_ERROR, "airspy_set_vga_gain() failed: %d", ret);
+            SoapySDR::logf(SOAPY_SDR_ERROR, "airspy_set_vga_gain() failed: %d", ret);
             return;
         }
         // Success
@@ -250,7 +253,7 @@ void SoapyAirspy::setGain(const int direction, const size_t channel, const std::
     }
     else
     {
-        SoapySDR_logf(SOAPY_SDR_ERROR, "setGain(%s) failed: unknown gain", name.c_str());
+        SoapySDR::logf(SOAPY_SDR_ERROR, "setGain(%s) failed: unknown gain", name.c_str());
         return;
     }
 }
@@ -317,7 +320,7 @@ void SoapyAirspy::setFrequency(const int direction,
 
 double SoapyAirspy::getFrequency(const int direction, const size_t channel, const std::string &name) const
 {
-    if(direction != SOAPY_SDR_RX) {
+    if(direction != SOAPY_SDR_RX or channel != 0) {
         SoapySDR_logf(SOAPY_SDR_ERROR, "getFrequency() direction must be RX");
         return 0;
     }
@@ -344,10 +347,16 @@ SoapySDR::RangeList SoapyAirspy::getFrequencyRange(
         const std::string &name) const
 {
     SoapySDR::RangeList results;
-    if (name == "RF")
-    {
+
+    if(direction != SOAPY_SDR_RX or channel != 0) {
+        SoapySDR_logf(SOAPY_SDR_ERROR, "getFrequencyRange() direction must be RX");
+        return results;
+    }
+
+    if (name == "RF") {
         results.push_back(SoapySDR::Range(24000000, 1800000000));
     }
+
     return results;
 }
 
@@ -369,7 +378,7 @@ void SoapyAirspy::setSampleRate(const int direction, const size_t channel, const
     int ret;
 
     if(direction != SOAPY_SDR_RX) {
-        SoapySDR_logf(SOAPY_SDR_ERROR, "setSampleRate() direction must be RX");
+        SoapySDR::logf(SOAPY_SDR_ERROR, "setSampleRate() direction must be RX");
         return;
     }
 
@@ -378,7 +387,7 @@ void SoapyAirspy::setSampleRate(const int direction, const size_t channel, const
     if(sampleRate != sampleRate_) {
         ret = airspy_set_samplerate(dev_, sampleRate);
         if(ret != AIRSPY_SUCCESS) {
-            SoapySDR_logf(SOAPY_SDR_ERROR, "airspy_set_samplerate() failed: %d", ret);
+            SoapySDR::logf(SOAPY_SDR_ERROR, "airspy_set_samplerate() failed: %d", ret);
             return;
         }
         // Success
@@ -389,7 +398,7 @@ void SoapyAirspy::setSampleRate(const int direction, const size_t channel, const
 double SoapyAirspy::getSampleRate(const int direction, const size_t channel) const
 {
     if(direction != SOAPY_SDR_RX) {
-        SoapySDR_logf(SOAPY_SDR_ERROR, "getSampleRate() direction must be RX");
+        SoapySDR::logf(SOAPY_SDR_ERROR, "getSampleRate() direction must be RX");
         return 0;
     }
 
@@ -406,7 +415,7 @@ std::vector<double> SoapyAirspy::listSampleRates(const int direction, const size
 
     ret = airspy_get_samplerates(dev_, &numRates, 0);
     if(ret != AIRSPY_SUCCESS) {
-        SoapySDR_logf(SOAPY_SDR_ERROR, "airspy_get_samplerates() failed: %d", ret);
+        SoapySDR::logf(SOAPY_SDR_ERROR, "airspy_get_samplerates() failed: %d", ret);
         return results;
     }
     // Success
@@ -414,7 +423,7 @@ std::vector<double> SoapyAirspy::listSampleRates(const int direction, const size
 
     ret = airspy_get_samplerates(dev_, samplerates.data(), numRates);
     if(ret != AIRSPY_SUCCESS) {
-        SoapySDR_logf(SOAPY_SDR_ERROR, "airspy_get_samplerates() failed: %d", ret);
+        SoapySDR::logf(SOAPY_SDR_ERROR, "airspy_get_samplerates() failed: %d", ret);
         return results;
     }
 
@@ -430,27 +439,22 @@ std::vector<double> SoapyAirspy::listSampleRates(const int direction, const size
 void SoapyAirspy::setBandwidth(const int direction, const size_t channel, const double bw)
 {
     if(direction != SOAPY_SDR_RX or channel != 0) {
-        SoapySDR_logf(SOAPY_SDR_ERROR, "setBandwidth() invalid direction or channel");
+        SoapySDR::logf(SOAPY_SDR_ERROR, "setBandwidth() invalid direction or channel");
         return;
     }
 
     bandwidth_ = bw;
-
-    // TODO: not sure about default implementation.
-    //SoapySDR::Device::setBandwidth(direction, channel, bw);
 }
 
 double SoapyAirspy::getBandwidth(const int direction, const size_t channel) const
 {
     if(direction != SOAPY_SDR_RX or channel != 0) {
-        SoapySDR_logf(SOAPY_SDR_ERROR, "getBandwidth() invalid direction or channel");
+        SoapySDR::logf(SOAPY_SDR_ERROR, "getBandwidth() invalid direction or channel");
         return 0;
     }
 
+    // TODO
     return bandwidth_;
-
-    // TODO: again not sure about default implementation.
-    // return SoapySDR::Device::getBandwidth(direction, channel);
 }
 
 std::vector<double> SoapyAirspy::listBandwidths(const int direction, const size_t channel) const
@@ -478,59 +482,68 @@ SoapySDR::ArgInfoList SoapyAirspy::getSettingInfo(void) const
 {
     SoapySDR::ArgInfoList setArgs;
 
-    // // Bias-T
-    // SoapySDR::ArgInfo biasOffsetArg;
-    // biasOffsetArg.key = "biastee";
-    // biasOffsetArg.value = "false";
-    // biasOffsetArg.name = "Bias tee";
-    // biasOffsetArg.description = "Enable the 4.5v DC Bias tee to power SpyVerter / LNA / etc. via antenna connection.";
-    // biasOffsetArg.type = SoapySDR::ArgInfo::BOOL;
+    // Bias-T
+    SoapySDR::ArgInfo biasOffsetArg;
+    biasOffsetArg.key = "biastee";
+    biasOffsetArg.value = "false";
+    biasOffsetArg.name = "Bias tee";
+    biasOffsetArg.description = "Enable the 4.5v DC Bias tee to power SpyVerter / LNA / etc. via antenna connection.";
+    biasOffsetArg.type = SoapySDR::ArgInfo::BOOL;
 
-    // setArgs.push_back(biasOffsetArg);
+    setArgs.push_back(biasOffsetArg);
 
-    // // bitpack
-    // SoapySDR::ArgInfo bitPackingArg;
-    // bitPackingArg.key = "bitpack";
-    // bitPackingArg.value = "false";
-    // bitPackingArg.name = "Bit Pack";
-    // bitPackingArg.description = "Enable packing 4 12-bit samples into 3 16-bit words for 25% less USB trafic.";
-    // bitPackingArg.type = SoapySDR::ArgInfo::BOOL;
+    // bitpack
+    SoapySDR::ArgInfo bitPackingArg;
+    bitPackingArg.key = "bitpack";
+    bitPackingArg.value = "false";
+    bitPackingArg.name = "Bit Pack";
+    bitPackingArg.description = "Enable packing 4 12-bit samples into 3 16-bit words for 25% less USB trafic.";
+    bitPackingArg.type = SoapySDR::ArgInfo::BOOL;
 
-    // setArgs.push_back(bitPackingArg);
+    setArgs.push_back(bitPackingArg);
 
     return setArgs;
 }
 
 void SoapyAirspy::writeSetting(const std::string &key, const std::string &value)
 {
-    // TODO
+    int ret;
 
-    // if (key == "biastee") {
-    //     bool enable = (value == "true");
-    //     rfBias = enable;
+    if (key == "biastee") {
+        bool enable = (value == "true");
+        rfBias_ = enable;
 
-    //     airspy_set_rf_bias(dev, enable);
-    // }
+        ret = airspy_set_rf_bias(dev_, enable);
+        if(ret != AIRSPY_SUCCESS) {
+            SoapySDR_logf(SOAPY_SDR_ERROR, "airspy_set_rf_bias() failed: %d", ret);
+        } else {
+            SoapySDR::logf(SOAPY_SDR_INFO, "airspy_set_rf_bias(%d)", enable);
+        }
 
-    //  if (key == "bitpack") {
-    //     bool enable = (value == "true");
-    //     bitPack = enable;
+    } else if (key == "bitpack") {
+        bool enable = (value == "true");
+        bitPack_ = enable;
 
-    //     airspy_set_packing(dev, enable);
-    // }
+        ret = airspy_set_packing(dev_, enable);
+        if(ret != AIRSPY_SUCCESS) {
+            SoapySDR_logf(SOAPY_SDR_ERROR, "airspy_set_packing() failed: %d", ret);
+        } else {
+            SoapySDR::logf(SOAPY_SDR_INFO, "airspy_set_packing(%d)", enable);
+        }
+    } else {
+        SoapySDR::logf(SOAPY_SDR_ERROR, "writeSetting() unknown key: %s", key.c_str());
+    }
 }
 
 std::string SoapyAirspy::readSetting(const std::string &key) const
 {
-    // TODO.
-
-    // if (key == "biastee") {
-    //     return rfBias?"true":"false";
-    // }
-    // if (key == "bitpack") {
-    //     return bitPack?"true":"false";
-    // }
-
-    // // SoapySDR_logf(SOAPY_SDR_WARNING, "Unknown setting '%s'", key.c_str());
-    return "";
+    if (key == "biastee") {
+        return rfBias_ ? "true" : "false";
+    }
+    else if (key == "bitpack") {
+        return bitPack_ ? "true" : "false";
+    } else {
+        SoapySDR::logf(SOAPY_SDR_ERROR, "readSetting() unknown key: %s", key.c_str());
+        return "";
+    }
 }
