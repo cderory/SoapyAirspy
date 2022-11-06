@@ -29,7 +29,7 @@ SoapyAirspy::SoapyAirspy(const SoapySDR::Kwargs &args)
       sampleSize_(0),
       rfBias_(false),
       bitPack_(false),
-      ringbuffer_(1 << 23) // fits 8 buffers
+      ringbuffer_(1 << 23) // fits 16 buffers TODO.
 {
 
     int ret;
@@ -72,6 +72,12 @@ SoapyAirspy::SoapyAirspy(const SoapySDR::Kwargs &args)
             writeSetting(it->first, it->second);
         }
     }
+
+    // Setup some default gains
+    setGain(SOAPY_SDR_RX, 0, "LNA", 8);
+    setGain(SOAPY_SDR_RX, 0, "LIX", 8);
+    setGain(SOAPY_SDR_RX, 0, "VGA", 8);
+    setGainMode(SOAPY_SDR_RX, 0, true);
 }
 
 SoapyAirspy::~SoapyAirspy(void)
@@ -281,7 +287,9 @@ double SoapyAirspy::getGain(const int direction, const size_t channel, const std
 
 SoapySDR::Range SoapyAirspy::getGainRange(const int direction, const size_t channel, const std::string &name) const
 {
-    if (name == "LNA" || name == "MIX" || name == "VGA") {
+    if (name == "LNA" ||
+        name == "MIX" ||
+        name == "VGA") {
         return SoapySDR::Range(0, 15);
     }
 

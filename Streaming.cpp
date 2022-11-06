@@ -25,6 +25,7 @@
 #include "SoapyAirspy.hpp"
 #include <SoapySDR/Logger.hpp>
 #include <SoapySDR/Formats.hpp>
+#include <SoapySDR/Time.hpp>
 #include <SoapySDR/ConverterRegistry.hpp>
 #include <algorithm> //min
 #include <climits> //SHRT_MAX
@@ -219,12 +220,12 @@ int SoapyAirspy::readStream(SoapySDR::Stream *stream,
          });
 
     if(copied < 0) {
-        SoapySDR::logf(SOAPY_SDR_DEBUG, "readStream: ringbuffer read timeout");
+        SoapySDR::logf(SOAPY_SDR_DEBUG, "readStream: ringbuffer read timeout %d", ringbuffer_.available());
         return SOAPY_SDR_TIMEOUT;
     }
 
     // TODO
-    timeNs = 0;
+    //timeNs = SoapySDR::ticksToTimeNs( _sampleCount, _sampleRate);
 
     return copied/sampleSize_;
 }

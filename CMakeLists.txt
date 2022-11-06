@@ -29,13 +29,14 @@ if(CMAKE_COMPILER_IS_GNUCXX)
     endif()
     #Thread support enabled (not the same as -lpthread)
     list(APPEND AIRSPY_LIBS -pthread)
-    #disable warnings for unused parameters
-    add_definitions(-Wno-unused-parameter)
 endif(CMAKE_COMPILER_IS_GNUCXX)
 
 if (APPLE)
    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -Wc++11-extensions")
 endif(APPLE)
+
+# Extra flags
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -Wno-unused-parameter -Wstrict-aliasing")
 
 # IF (APPLE)
 #  ADD_DEFINITIONS(
