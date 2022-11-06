@@ -75,7 +75,7 @@ SoapyAirspy::SoapyAirspy(const SoapySDR::Kwargs &args)
 
     // Setup some default gains
     setGain(SOAPY_SDR_RX, 0, "LNA", 8);
-    setGain(SOAPY_SDR_RX, 0, "LIX", 8);
+    setGain(SOAPY_SDR_RX, 0, "MIX", 8);
     setGain(SOAPY_SDR_RX, 0, "VGA", 8);
     setGainMode(SOAPY_SDR_RX, 0, true);
 }
