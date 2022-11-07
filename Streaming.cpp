@@ -49,7 +49,10 @@ std::vector<std::string> SoapyAirspy::getStreamFormats(const int direction,
 std::string SoapyAirspy::getNativeStreamFormat(const int direction,
                                                const size_t channel,
                                                double &fullScale) const {
-    // TODO maybe use constant?
+    if(direction != SOAPY_SDR_RX or channel != 0) {
+        SoapySDR::logf(SOAPY_SDR_ERROR, "getNativeStreamFormat invalid direction or channel");
+    }
+
     fullScale = 32767;
     return SOAPY_SDR_CS16;
 }
@@ -73,23 +76,24 @@ static int rx_callback_(airspy_transfer *transfer)
 
 int SoapyAirspy::rx_callback(airspy_transfer *transfer)
 {
-    const uint32_t timeout_us = 250000;
+    const auto timeout = std::chrono::microseconds(250000);
     const uint32_t to_copy = transfer->sample_count * sampleSize_;
 
     const auto copied = ringbuffer_.write_at_least
         (to_copy,
-         std::chrono::microseconds(timeout_us),
+         timeout,
          [&](uint8_t* begin, [[maybe_unused]] const uint32_t available) {
              // Copy samples to ringbufer
              std::memcpy(begin,
                          transfer->samples,
                          to_copy);
-
+             // Tell ringbuffer to how many we produced.
              return to_copy;
          });
 
     if(copied < 0) {
         SoapySDR::logf(SOAPY_SDR_INFO, "SoapyAirspy::rx_callback: ringbuffer write timeout");
+        // TODO. Improve overflow handling?
         return 0;
     }
 
@@ -224,7 +228,10 @@ int SoapyAirspy::readStream(SoapySDR::Stream *stream,
         return SOAPY_SDR_TIMEOUT;
     }
 
+    // TODO. Fix overflow handling.
+
     // TODO
+    timeNs = 0;
     //timeNs = SoapySDR::ticksToTimeNs( _sampleCount, _sampleRate);
 
     return copied/sampleSize_;

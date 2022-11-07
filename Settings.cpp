@@ -24,12 +24,14 @@
 
 #include "SoapyAirspy.hpp"
 
+
 SoapyAirspy::SoapyAirspy(const SoapySDR::Kwargs &args)
     : dev_(nullptr),
       sampleSize_(0),
+      gainMode_(LINEARITY),
       rfBias_(false),
       bitPack_(false),
-      ringbuffer_(1 << 23) // fits 16 buffers TODO.
+      ringbuffer_(1 << 22)
 {
 
     int ret;
@@ -73,11 +75,9 @@ SoapyAirspy::SoapyAirspy(const SoapySDR::Kwargs &args)
         }
     }
 
-    // Setup some default gains
-    setGain(SOAPY_SDR_RX, 0, "LNA", 8);
-    setGain(SOAPY_SDR_RX, 0, "MIX", 8);
-    setGain(SOAPY_SDR_RX, 0, "VGA", 8);
-    setGainMode(SOAPY_SDR_RX, 0, true);
+    // Default to lowest gain, probably the safest.
+    setGain(SOAPY_SDR_RX, 0, 0);
+    setGainMode(SOAPY_SDR_RX, 0, false);
 }
 
 SoapyAirspy::~SoapyAirspy(void)
@@ -162,19 +162,29 @@ bool SoapyAirspy::hasDCOffsetMode(const int direction, const size_t channel) con
 
 std::vector<std::string> SoapyAirspy::listGains(const int direction, const size_t channel) const
 {
-    //list available gain elements,
-    //the functions below have a "name" parameter
     std::vector<std::string> results;
 
-    results.push_back("LNA");
-    results.push_back("MIX");
-    results.push_back("VGA");
+    switch (gainMode_) {
+
+    case LINEARITY:
+        results.push_back("LIN");
+        break;
+    case SENSITIVITY:
+        results.push_back("SENS");
+        break;
+    case MANUAL:
+        results.push_back("LNA");
+        results.push_back("MIX");
+        results.push_back("VGA");
+        break;
+    }
 
     return results;
 }
 
 bool SoapyAirspy::hasGainMode(const int direction, const size_t channel) const
 {
+    // This means has AGC.
     return true;
 }
 
@@ -182,39 +192,47 @@ void SoapyAirspy::setGainMode(const int direction, const size_t channel, const b
 {
     int ret;
 
-    if(direction != SOAPY_SDR_RX) {
-        SoapySDR::logf(SOAPY_SDR_ERROR, "setGainMode: invalid direction");
+    if(direction != SOAPY_SDR_RX or channel != 0) {
+        SoapySDR::logf(SOAPY_SDR_ERROR, "setGainMode: invalid direction or channel");
+        return;
     }
 
     SoapySDR::logf(SOAPY_SDR_DEBUG, "setGainMode(%d)", automatic);
 
-    if(agcMode_ != automatic) {
-        // LNA
-        ret = airspy_set_lna_agc(dev_, automatic);
-        if(ret != AIRSPY_SUCCESS) {
-            SoapySDR::logf(SOAPY_SDR_ERROR, "airspy_set_lna_agc() failed: %d", ret);
-            return;
-        }
-        // Mixer
-        ret = airspy_set_mixer_agc(dev_, automatic);
-        if(ret != AIRSPY_SUCCESS) {
-            SoapySDR::logf(SOAPY_SDR_ERROR, "airspy_set_mixer_agc() failed: %d", ret);
-            return;
-        }
-        // Store
-        agcMode_ = automatic;
+    // LNA
+    ret = airspy_set_lna_agc(dev_, automatic);
+    if(ret != AIRSPY_SUCCESS) {
+        SoapySDR::logf(SOAPY_SDR_ERROR, "airspy_set_lna_agc() failed: %d", ret);
+        return;
     }
+    // Mixer
+    ret = airspy_set_mixer_agc(dev_, automatic);
+    if(ret != AIRSPY_SUCCESS) {
+        SoapySDR::logf(SOAPY_SDR_ERROR, "airspy_set_mixer_agc() failed: %d", ret);
+        return;
+    }
+    // Store
+    agcMode_ = automatic;
 }
 
 bool SoapyAirspy::getGainMode(const int direction, const size_t channel) const
 {
+    if(direction != SOAPY_SDR_RX or channel != 0) {
+        SoapySDR::logf(SOAPY_SDR_ERROR, "getGainMode: invalid direction or channel");
+        return agcMode_;
+    }
+
     return agcMode_;
 }
 
-void SoapyAirspy::setGain(const int direction, const size_t channel, const double value)
-{
-    //set the overall gain by distributing it across available gain elements
-    //OR delete this function to use SoapySDR's default gain distribution algorithm...
+void SoapyAirspy::setGain(const int direction, const size_t channel, const double value) {
+    if(direction != SOAPY_SDR_RX or channel != 0) {
+        SoapySDR::logf(SOAPY_SDR_ERROR, "setGain: invalid direction or channel");
+        return;
+    }
+
+    // Set the overall gain by distributing it across available gain
+    // elements using the default implementation.
     SoapySDR::Device::setGain(direction, channel, value);
 }
 
@@ -222,40 +240,59 @@ void SoapyAirspy::setGain(const int direction, const size_t channel, const std::
 {
 
     int ret;
+    uint8_t gain = static_cast<uint8_t>(value);
 
-    // TODO: fix casts
-    if (name == "LNA")
+    if(direction != SOAPY_SDR_RX or channel != 0) {
+        SoapySDR::logf(SOAPY_SDR_ERROR, "setGain: invalid direction or channel");
+        return;
+    }
+
+    // Set the gain element to the specified value.
+    if(name == "LIN") {
+        ret = airspy_set_linearity_gain(dev_, gain);
+        if(ret != AIRSPY_SUCCESS) {
+            SoapySDR::logf(SOAPY_SDR_ERROR, "airspy_set_linearity_gain() failed: %d", ret);
+            return;
+        }
+        linearityGain_ = gain;
+    }
+    else if(name == "SENS") {
+        ret = airspy_set_sensitivity_gain(dev_, gain);
+        if(ret != AIRSPY_SUCCESS) {
+            SoapySDR::logf(SOAPY_SDR_ERROR, "airspy_set_sensitivity_gain() failed: %d", ret);
+            return;
+        }
+        sensitivityGain_ = gain;
+    }
+    else if (name == "LNA")
     {
-        uint8_t lnaGain = static_cast<uint8_t>(value);
-        ret = airspy_set_lna_gain(dev_, lnaGain);
+        ret = airspy_set_lna_gain(dev_, gain);
         if(ret != AIRSPY_SUCCESS) {
             SoapySDR::logf(SOAPY_SDR_ERROR, "airspy_set_lna_gain() failed: %d", ret);
             return;
         }
         // Success
-        lnaGain_ = lnaGain;
+        lnaGain_ = gain;
     }
     else if (name == "MIX")
     {
-        uint8_t mixerGain = uint8_t(value);
-        ret = airspy_set_mixer_gain(dev_, mixerGain);
+        ret = airspy_set_mixer_gain(dev_, gain);
         if(ret != AIRSPY_SUCCESS) {
             SoapySDR::logf(SOAPY_SDR_ERROR, "airspy_set_mixer_gain() failed: %d", ret);
             return;
         }
         // Success
-        mixerGain_ = mixerGain;
+        mixerGain_ = gain;
     }
     else if (name == "VGA")
     {
-        uint8_t vgaGain = uint8_t(value);
-        ret = airspy_set_vga_gain(dev_, vgaGain_);
+        ret = airspy_set_vga_gain(dev_, gain);
         if(ret != AIRSPY_SUCCESS) {
             SoapySDR::logf(SOAPY_SDR_ERROR, "airspy_set_vga_gain() failed: %d", ret);
             return;
         }
         // Success
-        vgaGain_ = vgaGain;
+        vgaGain_ = gain;
     }
     else
     {
@@ -266,7 +303,15 @@ void SoapyAirspy::setGain(const int direction, const size_t channel, const std::
 
 double SoapyAirspy::getGain(const int direction, const size_t channel, const std::string &name) const
 {
-    if (name == "LNA")
+    if(name == "LIN")
+    {
+        return linearityGain_;
+    }
+    else if(name == "SENS")
+    {
+        return sensitivityGain_;
+    }
+    else if (name == "LNA")
     {
         return lnaGain_;
     }
@@ -287,13 +332,20 @@ double SoapyAirspy::getGain(const int direction, const size_t channel, const std
 
 SoapySDR::Range SoapyAirspy::getGainRange(const int direction, const size_t channel, const std::string &name) const
 {
-    if (name == "LNA" ||
-        name == "MIX" ||
-        name == "VGA") {
+    if(name == "LIN" or name == "SENS")
+    {
+        return SoapySDR::Range(0, 21);
+    }
+    else if(name == "LNA" or
+              name == "MIX" or
+              name == "VGA") {
         return SoapySDR::Range(0, 15);
     }
-
-    return SoapySDR::Range(0, 15);
+    else
+    {
+        SoapySDR_logf(SOAPY_SDR_ERROR, "getGainRange() unknown gain name: %s", name.c_str());
+        return SoapySDR::Range(0, 0);
+    }
 }
 
 /*******************************************************************
@@ -313,39 +365,32 @@ void SoapyAirspy::setFrequency(const int direction,
 
     if(name == "RF") {
         uint32_t centerFrequency = static_cast<uint32_t>(frequency);
-        // Only set if changed
-        if(centerFrequency_ != centerFrequency) {
-            int ret = airspy_set_freq(dev_, centerFrequency);
-            if(ret != AIRSPY_SUCCESS) {
-                SoapySDR_logf(SOAPY_SDR_ERROR, "airspy_set_freq() failed: %d", ret);
-                return;
-            }
-            // Success
-            centerFrequency_ = centerFrequency;
+        int ret = airspy_set_freq(dev_, centerFrequency);
+        if(ret != AIRSPY_SUCCESS) {
+            SoapySDR_logf(SOAPY_SDR_ERROR, "airspy_set_freq() failed: %d", ret);
+            return;
         }
+        // Success
+        centerFrequency_ = centerFrequency;
     }
 }
 
 double SoapyAirspy::getFrequency(const int direction, const size_t channel, const std::string &name) const
 {
-    if(direction != SOAPY_SDR_RX or channel != 0) {
+    if(direction != SOAPY_SDR_RX or channel != 0 or name != "RF") {
         SoapySDR_logf(SOAPY_SDR_ERROR, "getFrequency() direction must be RX");
         return 0;
     }
 
-    if (name == "RF") {
-        return (double) centerFrequency_;
-    }
-    else {
-        SoapySDR_logf(SOAPY_SDR_ERROR, "getFrequency() unknown name: %s", name.c_str());
-        return 0;
-    }
+    return (double) centerFrequency_;
 }
 
 std::vector<std::string> SoapyAirspy::listFrequencies(const int direction, const size_t channel) const
 {
     std::vector<std::string> names;
+
     names.push_back("RF");
+
     return names;
 }
 
@@ -356,14 +401,12 @@ SoapySDR::RangeList SoapyAirspy::getFrequencyRange(
 {
     SoapySDR::RangeList results;
 
-    if(direction != SOAPY_SDR_RX or channel != 0) {
+    if(direction != SOAPY_SDR_RX or channel != 0 or name != "RF") {
         SoapySDR_logf(SOAPY_SDR_ERROR, "getFrequencyRange() direction must be RX");
         return results;
     }
 
-    if (name == "RF") {
-        results.push_back(SoapySDR::Range(24000000, 1800000000));
-    }
+    results.push_back(SoapySDR::Range(24000000, 1800000000));
 
     return results;
 }
@@ -405,7 +448,7 @@ void SoapyAirspy::setSampleRate(const int direction, const size_t channel, const
 
 double SoapyAirspy::getSampleRate(const int direction, const size_t channel) const
 {
-    if(direction != SOAPY_SDR_RX) {
+    if(direction != SOAPY_SDR_RX or channel != 0) {
         SoapySDR::logf(SOAPY_SDR_ERROR, "getSampleRate() direction must be RX");
         return 0;
     }
@@ -416,16 +459,22 @@ double SoapyAirspy::getSampleRate(const int direction, const size_t channel) con
 std::vector<double> SoapyAirspy::listSampleRates(const int direction, const size_t channel) const
 {
     std::vector<double> results;
-
     int ret;
     uint32_t numRates;
     std::vector<uint32_t> samplerates;
 
+    if(direction != SOAPY_SDR_RX or channel != 0) {
+        SoapySDR::logf(SOAPY_SDR_ERROR, "listSampleRates() direction must be RX");
+        return std::vector<double>();
+    }
+
+    // Set rate
     ret = airspy_get_samplerates(dev_, &numRates, 0);
     if(ret != AIRSPY_SUCCESS) {
         SoapySDR::logf(SOAPY_SDR_ERROR, "airspy_get_samplerates() failed: %d", ret);
         return results;
     }
+
     // Success
     samplerates.resize(numRates);
 
@@ -476,7 +525,7 @@ std::vector<double> SoapyAirspy::listBandwidths(const int direction, const size_
 
     for(const auto& samplerate : listSampleRates(direction, channel)) {
         // Conservative estimate
-        results.push_back(samplerate * 0.75);
+        results.push_back(samplerate * 0.9);
     }
 
     return results;
@@ -504,11 +553,21 @@ SoapySDR::ArgInfoList SoapyAirspy::getSettingInfo(void) const
     SoapySDR::ArgInfo bitPackingArg;
     bitPackingArg.key = "bitpack";
     bitPackingArg.value = "false";
-    bitPackingArg.name = "Bit Pack";
+    bitPackingArg.name = "Bit pack";
     bitPackingArg.description = "Enable packing 4 12-bit samples into 3 16-bit words for 25% less USB trafic.";
     bitPackingArg.type = SoapySDR::ArgInfo::BOOL;
 
     setArgs.push_back(bitPackingArg);
+
+    // bitpack
+    SoapySDR::ArgInfo gainModeArg;
+    gainModeArg.key = "gainmode";
+    gainModeArg.value = "0";
+    gainModeArg.name = "Gain Mode";
+    gainModeArg.description = "0 = linearity, 1 = sensitivity, 2 = manual";
+    gainModeArg.type = SoapySDR::ArgInfo::INT;
+
+    setArgs.push_back(gainModeArg);
 
     return setArgs;
 }
@@ -517,7 +576,8 @@ void SoapyAirspy::writeSetting(const std::string &key, const std::string &value)
 {
     int ret;
 
-    if (key == "biastee") {
+    if (key == "biastee")
+    {
         bool enable = (value == "true");
         rfBias_ = enable;
 
@@ -527,30 +587,45 @@ void SoapyAirspy::writeSetting(const std::string &key, const std::string &value)
         } else {
             SoapySDR::logf(SOAPY_SDR_INFO, "airspy_set_rf_bias(%d)", enable);
         }
-
-    } else if (key == "bitpack") {
+    }
+    else if (key == "bitpack")
+    {
         bool enable = (value == "true");
         bitPack_ = enable;
 
         ret = airspy_set_packing(dev_, enable);
         if(ret != AIRSPY_SUCCESS) {
-            SoapySDR_logf(SOAPY_SDR_ERROR, "airspy_set_packing() failed: %d", ret);
+            SoapySDR::logf(SOAPY_SDR_ERROR, "airspy_set_packing() failed: %d", ret);
         } else {
             SoapySDR::logf(SOAPY_SDR_INFO, "airspy_set_packing(%d)", enable);
         }
-    } else {
+    }
+    else if(key == "gainmode")
+    {
+        // TODO: catch exception?
+        int mode = std::stoi(value);
+        gainMode_ = (mode == 0 or mode == 1 or mode == 2) ?
+            static_cast<gain_mode_t>(mode) : LINEARITY;
+        SoapySDR::logf(SOAPY_SDR_INFO, "gainMode_ = %d", gainMode_);
+    }
+    else
+    {
         SoapySDR::logf(SOAPY_SDR_ERROR, "writeSetting() unknown key: %s", key.c_str());
     }
 }
 
 std::string SoapyAirspy::readSetting(const std::string &key) const
-{
+    {
     if (key == "biastee") {
         return rfBias_ ? "true" : "false";
     }
     else if (key == "bitpack") {
         return bitPack_ ? "true" : "false";
-    } else {
+    }
+    else if (key == "gainmode") {
+        return std::to_string(gainMode_);
+    }
+    else {
         SoapySDR::logf(SOAPY_SDR_ERROR, "readSetting() unknown key: %s", key.c_str());
         return "";
     }

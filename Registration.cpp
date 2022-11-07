@@ -24,7 +24,8 @@
 
 #include "SoapyAirspy.hpp"
 #include <SoapySDR/Registry.hpp>
-// #include <cstdlib> //malloc
+#include <iostream>
+#include <iomanip>
 #include <algorithm>
 
 static std::vector<SoapySDR::Kwargs> findAirspy(const SoapySDR::Kwargs &args)
@@ -34,26 +35,27 @@ static std::vector<SoapySDR::Kwargs> findAirspy(const SoapySDR::Kwargs &args)
     airspy_lib_version_t asVersion;
     airspy_lib_version(&asVersion);
 
-    SoapySDR_logf(SOAPY_SDR_DEBUG, "AirSpy Lib v%d.%d rev %d", asVersion.major_version,
-                  asVersion.minor_version,
-                  asVersion.revision);
+    SoapySDR::logf(SOAPY_SDR_DEBUG, "AirSpy Lib v%d.%d rev %d", asVersion.major_version,
+                   asVersion.minor_version,
+                   asVersion.revision);
 
     uint64_t serials[MAX_DEVICES];
     int count = airspy_list_devices(serials, MAX_DEVICES);
     if (count < 0) {
-        SoapySDR_logf(SOAPY_SDR_ERROR, "libairspy error listing devices");
+        SoapySDR::logf(SOAPY_SDR_ERROR, "libairspy error listing devices");
         return results;
     }
 
-    SoapySDR_logf(SOAPY_SDR_DEBUG, "%d AirSpy boards found.", count);
+    SoapySDR::logf(SOAPY_SDR_DEBUG, "%d AirSpy boards found.", count);
 
     for (int i = 0; i < count; i++) {
         std::stringstream serialstr;
 
         serialstr.str("");
-        serialstr << std::hex << serials[i];
+        // Length of serial is 64 bits.
+        serialstr << std::setfill('0') << std::setw(16) << std::hex << serials[i];
 
-        SoapySDR_logf(SOAPY_SDR_DEBUG, "Serial %s", serialstr.str().c_str());
+        SoapySDR::logf(SOAPY_SDR_DEBUG, "Serial %s", serialstr.str().c_str());
 
         SoapySDR::Kwargs soapyInfo;
 
@@ -64,7 +66,7 @@ static std::vector<SoapySDR::Kwargs> findAirspy(const SoapySDR::Kwargs &args)
             if (args.at("serial") != soapyInfo.at("serial")) {
                 continue;
             }
-            SoapySDR_logf(SOAPY_SDR_DEBUG, "Found device by serial %s", soapyInfo.at("serial").c_str());
+            SoapySDR::logf(SOAPY_SDR_DEBUG, "Found device by serial %s", soapyInfo.at("serial").c_str());
         }
 
         results.push_back(soapyInfo);

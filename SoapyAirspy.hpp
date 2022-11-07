@@ -208,21 +208,29 @@ public:
 
 private:
 
-    //device handle
+    enum gain_mode_t { LINEARITY, SENSITIVITY, MANUAL };
+
+    // Device handle
     uint64_t serial_;
     struct airspy_device *dev_;
 
     // Gains
+    // Mixed
+    uint8_t linearityGain_;
+    uint8_t sensitivityGain_;
+    // Manual
     uint8_t lnaGain_;
     uint8_t mixerGain_;
     uint8_t vgaGain_;
 
+    // TODO this might not be entirely thread safe.
     uint32_t sampleSize_;
 
     // Other settings
+    gain_mode_t gainMode_;
+
     bool rfBias_;
     bool bitPack_;
-
     bool agcMode_;
 
     uint32_t sampleRate_;
