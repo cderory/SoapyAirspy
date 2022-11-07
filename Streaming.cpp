@@ -169,8 +169,14 @@ int SoapyAirspy::activateStream(SoapySDR::Stream *stream,
 {
     int ret;
 
-    if (flags != 0) { return SOAPY_SDR_NOT_SUPPORTED; }
+    if (flags != 0) {
+        SoapySDR::logf(SOAPY_SDR_ERROR, "SoapyAirspy::activateStream() - flags not supported");
+    }
 
+    SoapySDR::logf(SOAPY_SDR_DEBUG, "SoapyAirspy::activateStream() flags=%d timeNs=%lld numElems=%d",
+                   flags, timeNs, numElems);
+
+    // Clear ringbuffer of old samples
     ringbuffer_.clear();
 
     ret = airspy_start_rx(dev_, rx_callback_, this);
@@ -187,10 +193,16 @@ int SoapyAirspy::deactivateStream(SoapySDR::Stream *stream, const int flags, con
 
     int ret;
 
-    SoapySDR::logf(SOAPY_SDR_DEBUG, "deactivateStream: flags=%d, timeNs=%lld", flags, timeNs);
+    if(flags != 0) {
+        SoapySDR::logf(SOAPY_SDR_ERROR, "SoapyAirspy::deactivateStream() - flags not supported");
+    }
+
+    SoapySDR::logf(SOAPY_SDR_DEBUG, "SoapyAirspy::deactivateStream: flags=%d, timeNs=%lld", flags, timeNs);
 
     // No flags supported
-    if (flags != 0) { return SOAPY_SDR_NOT_SUPPORTED; }
+    if (flags != 0) {
+        SoapySDR::logf(SOAPY_SDR_ERROR, "deactivateStream: flags=%d not supported", flags);
+    }
 
     ret = airspy_stop_rx(dev_);
     if (ret != AIRSPY_SUCCESS) {
@@ -208,7 +220,7 @@ int SoapyAirspy::readStream(SoapySDR::Stream *stream,
                             long long &timeNs,
                             const long timeoutUs) {
 
-    if(flags != 0) { return SOAPY_SDR_NOT_SUPPORTED; }
+    flags = 0;
 
     const auto to_copy = std::min(numElems * sampleSize_,
                                   getStreamMTU(stream) * sampleSize_);
