@@ -28,6 +28,7 @@
 #include <iomanip>
 #include <algorithm>
 
+
 static std::vector<SoapySDR::Kwargs> findAirspy(const SoapySDR::Kwargs &args)
 {
     std::vector<SoapySDR::Kwargs> results;

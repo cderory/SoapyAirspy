@@ -55,12 +55,14 @@ class RingBuffer {
         // Get pagesize
         const uint32_t pagesize = getpagesize();
         if(size < pagesize) {
-            throw std::runtime_error("Capacity must be at least pagesize: " + std::to_string(pagesize)
-                + " requested size: " + std::to_string(size));
+            throw std::runtime_error("Capacity must be at least pagesize: "
+                                     + std::to_string(pagesize)
+                                     + " requested size: " + std::to_string(size));
         }
 
         if(!is_power_of_two(size)) {
-            throw std::runtime_error("Capacity must be a power of two, requested size: " + std::to_string(size));
+            throw std::runtime_error("Capacity must be a power of two, requested size: "
+                                     + std::to_string(size));
         }
 
         // Create a memfd. Name is only for debugging purposes and can
@@ -68,19 +70,22 @@ class RingBuffer {
         int mem_fd = memfd_create("soapy_ring_buffer", 0);
         if(mem_fd == -1) {
             // TODO: add excact error
-            throw std::runtime_error("Could not create memfd: " + std::string(strerror(errno)));
+            throw std::runtime_error("Could not create memfd: "
+                                     + std::string(strerror(errno)));
         }
 
         // Truncate to size
         const int ftruncate_res = ftruncate(mem_fd, size);
         if(ftruncate_res == -1) {
-            throw std::runtime_error("Could not ftruncate memfd: " + std::string(strerror(errno)));
+            throw std::runtime_error("Could not ftruncate memfd: "
+                                     + std::string(strerror(errno)));
         }
 
         // Find a piece of memory of size 2 * size.
         void* buffer = mmap(NULL, 2 * size, PROT_NONE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
         if (buffer == MAP_FAILED) {
-            throw std::runtime_error("Could not mmap buffer: " + std::string(strerror(errno)));
+            throw std::runtime_error("Could not mmap buffer: "
+                                     + std::string(strerror(errno)));
         }
 
         // Map the memfd to the first half of the buffer
@@ -90,7 +95,8 @@ class RingBuffer {
                               mem_fd, 0);
 
         if (buffer_1 == MAP_FAILED or buffer_1 != addr_hint_1) {
-            throw std::runtime_error("Could not mmap buffer1: " + std::string(strerror(errno)));
+            throw std::runtime_error("Could not mmap buffer1: "
+                                     + std::string(strerror(errno)));
         }
 
         // Map the memfd to the second half of the buffer
@@ -103,7 +109,8 @@ class RingBuffer {
 
         // Check if the second mmap was successful and that address is correct.
         if (buffer_2 == MAP_FAILED or buffer_2 != addr_hint_2) {
-            throw std::runtime_error("Could not mmap buffer2: " + std::string(strerror(errno)));
+            throw std::runtime_error("Could not mmap buffer2: "
+                                     + std::string(strerror(errno)));
         }
 
         // Probably not strictly neccassry.
@@ -153,7 +160,7 @@ public:
     // Available elements to read
     inline uint32_t available(const uint32_t required = 0) noexcept {
         if(available_cached_ < required) {
-            available_cached_ = write_pos_.load(std::memory_order_acquire)- read_pos_cached_;
+            available_cached_ = write_pos_.load(std::memory_order_acquire) - read_pos_cached_;
         }
         return available_cached_;
     }

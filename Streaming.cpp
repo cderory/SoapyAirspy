@@ -27,9 +27,10 @@
 #include <SoapySDR/Formats.hpp>
 #include <SoapySDR/Time.hpp>
 #include <SoapySDR/ConverterRegistry.hpp>
-#include <algorithm> //min
-#include <climits> //SHRT_MAX
-#include <cstring> // memcpy
+
+#include <algorithm>
+#include <climits>
+#include <cstring>
 #include <chrono>
 #include <cstdint>
 
@@ -158,7 +159,6 @@ void SoapyAirspy::closeStream(SoapySDR::Stream *stream)
 
 size_t SoapyAirspy::getStreamMTU(SoapySDR::Stream *stream) const
 {
-    // TODO: MAKE DEFINE
     return SOAPY_AIRSPY_STREAM_MTU;
 }
 

@@ -37,7 +37,6 @@
 #include <algorithm>
 #include <atomic>
 
-
 #include <libairspy/airspy.h>
 
 #include "RingBuffer.hpp"
@@ -100,26 +99,6 @@ public:
                    int &flags,
                    long long &timeNs,
                    const long timeoutUs = 100000);
-
-    /*******************************************************************
-     * Direct buffer access API
-     ******************************************************************/
-
-    // size_t getNumDirectAccessBuffers(SoapySDR::Stream *stream);
-
-    // int getDirectAccessBufferAddrs(SoapySDR::Stream *stream, const size_t handle, void **buffs);
-
-    // int acquireReadBuffer(
-    //     SoapySDR::Stream *stream,
-    //     size_t &handle,
-    //     const void **buffs,
-    //     int &flags,
-    //     long long &timeNs,
-    //     const long timeoutUs = 100000);
-
-    // void releaseReadBuffer(
-    //     SoapySDR::Stream *stream,
-    //     const size_t handle);
 
     /*******************************************************************
      * Antenna API
@@ -215,7 +194,7 @@ private:
     struct airspy_device *dev_;
 
     // Gains
-    // Mixed
+    // Mixed combinations in low level driver
     uint8_t linearityGain_;
     uint8_t sensitivityGain_;
     // Manual
@@ -226,7 +205,7 @@ private:
     // TODO this might not be entirely thread safe.
     uint32_t sampleSize_;
 
-    // Other settings
+    // Gain configuration;
     gain_mode_t gainMode_;
 
     bool rfBias_;
