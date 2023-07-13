@@ -2,13 +2,35 @@
 # Build Soapy SDR support module for Airspy Devices
 ###################################################
 
-cmake_minimum_required(VERSION 2.8.7)
+cmake_minimum_required(VERSION 3.5)
 
 project(SoapyAirspy CXX)
 
-find_package(SoapySDR "0.4.0" NO_MODULE REQUIRED)
+# This module needs c++17
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED TRUE)
+set(CMAKE_CXX_EXTENSIONS OFF)
+
+# Create a compile_commands.json file for use with clang tooling
+set(CMAKE_EXPORT_COMPILE_COMMANDS 1)
+
+if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+  add_compile_options(
+    -Wall
+    -pedantic
+    -Wshadow
+    -Wextra
+    -Wpointer-arith
+    -Wcast-qual
+    -Wcast-align
+    -Wconversion
+    -Wstrict-aliasing=2
+  )
+endif()
+
+find_package(SoapySDR "0.7.0" NO_MODULE REQUIRED)
 if (NOT SoapySDR_FOUND)
-    message(FATAL_ERROR "Soapy SDR development files not found...")
+  message(FATAL_ERROR "Soapy SDR development files not found...")
 endif ()
 
 list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR})
@@ -17,45 +39,16 @@ find_package(LibAIRSPY)
 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR} ${LIBAIRSPY_INCLUDE_DIRS})
 
-#enable c++11 features
-if(CMAKE_COMPILER_IS_GNUCXX)
-    #C++11 is a required language feature for this project
-    include(CheckCXXCompilerFlag)
-    CHECK_CXX_COMPILER_FLAG("-std=c++11" HAS_STD_CXX11)
-    if(HAS_STD_CXX11)
-        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
-    else(HAS_STD_CXX11)
-        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++0x")
-    endif()
-    #Thread support enabled (not the same as -lpthread)
-    list(APPEND AIRSPY_LIBS -pthread)
-endif(CMAKE_COMPILER_IS_GNUCXX)
-
-if (APPLE)
-   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -Wc++11-extensions")
-endif(APPLE)
-
-# Extra flags
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -Wno-unused-parameter -Wstrict-aliasing -faligned-new")
-
-# IF (APPLE)
-#  ADD_DEFINITIONS(
-#    -D__MACOSX_CORE__
-#  )
-# FIND_LIBRARY(COREFOUNDATION_LIBRARY CoreFoundation)
-#SET (AIRSPY_LIBS ${COREFOUNDATION_LIBRARY} ${AIRSPY_LIBS} )
-# ENDIF (APPLE)
-
 list(APPEND AIRSPY_LIBS ${LIBAIRSPY_LIBRARIES})
 
 SOAPY_SDR_MODULE_UTIL(
-    TARGET airspySupport
-    SOURCES
-        SoapyAirspy.hpp
-        Registration.cpp
-        Settings.cpp
-        Streaming.cpp
-        RingBuffer.hpp
-    LIBRARIES
-        ${AIRSPY_LIBS}
+  TARGET airspySupport
+  SOURCES
+  SoapyAirspy.hpp
+  Registration.cpp
+  Settings.cpp
+  Streaming.cpp
+  RingBuffer.hpp
+  LIBRARIES
+  ${AIRSPY_LIBS}
 )

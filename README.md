@@ -1,5 +1,25 @@
 # Soapy SDR plugin for Airspy R2 and Mini
 
+## Building
+
+Make sure you have SoapySDR installed and do something like this:
+
+    mkdir build
+    cd build
+    cmake ..
+    make
+    sudo install
+
+## Using
+
+Use this device string in GQRX:
+
+    soapy=0,driver=airspy
+
+More settings are available:
+
+    soapy=0,driver=airspy,biastee=true|false,gains=linearity|sensitivity|manual
+
 ## This branch (v2)
 
 **This branch is work in progress**.
@@ -16,7 +36,6 @@ I have tested this with GQRX with good results.
 Please consider sponsoring me on GitHub if you enjoy this
 work. Everything I earn through donations will go to families and
 children of Ukraine who have lost their homes because of the war.
-
 
 ## Dependencies
 
