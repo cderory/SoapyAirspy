@@ -8,7 +8,7 @@ Make sure you have SoapySDR installed and do something like this:
     cd build
     cmake ..
     make
-    sudo install
+    sudo make install
 
 ## Using
 
